@@ -17,6 +17,26 @@ countries_polygons = geopandas.read_file(shapereader.natural_earth(resolution='1
 
 pink = np.array([1.0, 0.4, 0.7, 1.0])  # RGBA for pink
 
+def make_viridis_pink(vmin=-2, vmax=100, pink_upper=0.0001, n_viridis=254):
+    """Colormap/norm pair that is flat pink over [vmin, pink_upper] and
+    viridis over (pink_upper, vmax]. Uses BoundaryNorm so the pink/viridis
+    boundary sits exactly at pink_upper regardless of vmax (a plain
+    Normalize + a default-resolution LinearSegmentedColormap would round
+    the boundary to the nearest of its 256 LUT steps, i.e. off by up to
+    (vmax-vmin)/256 - noticeable for a narrow pink band). cmap and norm
+    must always be used together since the boundary is baked into both."""
+    viridis_colors = plt.cm.viridis(np.linspace(0, 1, n_viridis))
+    colors = np.vstack([pink, viridis_colors])
+    cmap = mcolors.ListedColormap(colors)
+    bounds = [vmin, pink_upper] + list(np.linspace(pink_upper, vmax, n_viridis + 1))[1:]
+    norm = mcolors.BoundaryNorm(bounds, ncolors=len(colors))
+    return cmap, norm
+
+
+viridis_pink, viridis_pink_norm = make_viridis_pink(vmax=100)
+viridis_pink_50, viridis_pink_norm_50 = make_viridis_pink(vmax=50)
+viridis_pink_15, viridis_pink_norm_15 = make_viridis_pink(vmax=15)
+
 
 
 def make_viridis_pink(vmin=-4, vmax=100, pink_upper=0.0001, n_viridis=254):
@@ -90,20 +110,20 @@ species_to_color = {
 }
 
 
-def plot_present_historical_single_portfolio(occurrences, projections, filename):
+def plot_present_historical_single_portfolio(occurrences, deduped_occurrences, projections, filename):
     fig, ax = plt.subplots(1, 4, figsize=(24, 6), subplot_kw={'projection': ccrs.PlateCarree()})
 
     s = 0.1
-
+    
     cmap = prob_cmap
     norm = prob_norm
 
-    sc0 = occurrences.plot.scatter(
+    # For plotting, we use the deduped dataset, otherwise pixels will be right on top of each other.
+    sc0 = deduped_occurrences.plot.scatter(
         x='lon', y='lat', c='occurring_species_suitability_present', s=s,
         cmap=cmap, norm=norm, ax=ax[0], colorbar=False, rasterized=True, marker='s'
     )
-
-    sc1 = occurrences.plot.scatter(
+    sc1 = deduped_occurrences.plot.scatter(
         x='lon', y='lat', c='future_min_suitability', s=s,
         cmap=cmap, norm=norm, ax=ax[1], colorbar=False, rasterized=True, marker='s'
     )
@@ -115,12 +135,16 @@ def plot_present_historical_single_portfolio(occurrences, projections, filename)
         x='x', y='y', c='opt_portfolio_min_prob', s=s,
         cmap=cmap, norm=norm, ax=ax[3], colorbar=False, rasterized=True, marker='s'
     )
-
-    ax[0].set_title('Present day\nmaximum suitability', fontsize=14)
-    ax[1].set_title('Minimal future suitability\nof best-suited present day species', fontsize=14)
-    ax[2].set_title('Minimal future suitability\nof single best species', fontsize=14)
-    ax[3].set_title('Minimal future suitability\nof portfolio', fontsize=14)
-
+    # to count, we still want to have the not-deduped one, because we want to assess every tree occurrence that we have!
+    n_marginallysuitable_present = 100.0 * sum(occurrences['occurring_species_suitability_present']<5)/len(occurrences)
+    n_marginallysuitable_future = 100.0 * sum(occurrences['future_min_suitability']<5)/len(occurrences)
+    n_marginallysuitable_singlespec = 100.0 * sum(projections['opt_single_species_min_prob']<5)/len(projections)
+    n_marginallysuitable_portfolio = 100.0 * sum(projections['opt_portfolio_min_prob']<5)/len(projections)
+    ax[0].set_title(f'Present day\nmaximum suitability\n({n_marginallysuitable_present:.0f}% of occurrences less than 5% suitable)', fontsize=14)
+    ax[1].set_title(f'Minimal future suitability\nof best-suited present day species\n({n_marginallysuitable_future:.0f}% of occurrences less than 5% suitable)', fontsize=14)
+    ax[2].set_title(f'Minimal future suitability\nof single best species\n({n_marginallysuitable_singlespec:.0f}% of occurrences less than 5% suitable)', fontsize=14)
+    ax[3].set_title(f'Minimal future suitability\nof portfolio\n({n_marginallysuitable_portfolio:.0f}% of occurrences less than 5% suitable)', fontsize=14)
+    
     for idx, letter in enumerate(['a', 'b', 'c', 'd']):
         ax[idx].text(0.1, 0.9, letter + ')', fontsize=15, weight='bold',
                      va='top', ha='right', transform=ax[idx].transAxes)
@@ -135,20 +159,20 @@ def plot_present_historical_single_portfolio(occurrences, projections, filename)
         ax[idx].set_yticks([35, 45, 55, 65], crs=ccrs.PlateCarree())
         ax[idx].xaxis.set_major_formatter(LONGITUDE_FORMATTER)
         ax[idx].yaxis.set_major_formatter(LATITUDE_FORMATTER)
-
-
+    
+    
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm._A = []  # required for older matplotlib versions
-
+    
     cbar_ax = fig.add_axes([0.92, 0.2, 0.01, 0.6])
     cbar = fig.colorbar(sm, cax=cbar_ax)
     cbar.set_label('Suitability')
-
+    
     plt.subplots_adjust(right=0.9)
-
+    
     cbar.set_ticks([0.00005, 0.0001, 5, 10, 30, 100])
     cbar.set_ticklabels(['0', '>0', '5', '10', '30', '100'])
-
+    
     if filename:
         fig.savefig(filename, dpi=300, bbox_inches='tight')
 
@@ -170,9 +194,9 @@ def plot_single_vs_portfolio(df_final_optimized, titleaddition='', filename=''):
         cbar1.set_ticks([-2, 0, 10, 20, 30, 40, 50])
         cbar1.set_ticklabels(['0', '>0', '10', '20', '30', '40', '50'])
         cbar1.ax.minorticks_off()
-
+    
     fig.colorbar(sc2, ax=ax[2], label='Difference in suitability (%-points)', shrink=0.8)
-
+    
     for idx in range(len(ax)):
         label = f"{chr(97 + idx)})"  # chr(97) = 'a'
         ax[idx].text(
@@ -192,12 +216,12 @@ def plot_single_vs_portfolio(df_final_optimized, titleaddition='', filename=''):
         ax[idx].set_xlabel('Lon')
         ax[idx].set_xticks([-10, 0, 10, 20, 30], crs=ccrs.PlateCarree())
         ax[idx].set_yticks([35, 45, 55, 65], crs=ccrs.PlateCarree())
-
+    
         ax[idx].xaxis.set_major_formatter(LONGITUDE_FORMATTER)
         ax[idx].yaxis.set_major_formatter(LATITUDE_FORMATTER)
 
     fig.tight_layout()
-
+    
     if filename:
         fig.savefig(filename, dpi=300, bbox_inches='tight')
 
@@ -277,11 +301,11 @@ def plot_n_species_of_portfolio(df, filename=''):
         ax[idx].set_xlabel('Lon')
         ax[idx].set_xticks([-10, 0, 10, 20, 30], crs=ccrs.PlateCarree())
         ax[idx].set_yticks([35, 45, 55, 65], crs=ccrs.PlateCarree())
-
+    
         ax[idx].xaxis.set_major_formatter(LONGITUDE_FORMATTER)
         ax[idx].yaxis.set_major_formatter(LATITUDE_FORMATTER)
 
-
+    
     if filename:
         fig.savefig(filename, dpi=300, bbox_inches='tight')
 
