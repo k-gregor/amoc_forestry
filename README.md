@@ -4,6 +4,7 @@ This repository runs standalone with the data provided in the `data` directory. 
 This allows running the optimization and reproducing all the figures on a laptop. Those figures will look very similar to the ones in the paper.
 To run the optimization on the entire dataset, one would need access to a machine with more RAM, ideally a supercomputer.
 
+- environment.yml: use this to create a conda environment that contains all necessary libraries to reproduce the results and figures
 - input_data.ipynb: shows different statistics about the input data (species suitabilities)
 - optimization.ipynb: runs the optimization and stores it (not needed to plot the figures, as an optimized dataset is provided within this repo already)
 - optimization_plots.ipynb takes the optimized data and plots them across the continent.
