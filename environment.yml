@@ -1,0 +1,13 @@
+name: amoc
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - cartopy
+  - geopandas
+  - jupyter
+  - ipykernel
