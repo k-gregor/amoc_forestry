@@ -3,7 +3,7 @@ from scipy.optimize import linprog
 
 LAMBDA = 0.00001
 
-def get_mean_with_min_value(array, cutoff=100):
+def get_mean_with_min_value(array, cutoff=100.0):
     """
     Calculates a mean value but "rounds down" values in excess of `cutoff` to the value of `cutoff`.
     Here's the reason. The following two species would have equal average performance (0.5), but obviously the second one is better for our case (a suitability of 50% is great).
